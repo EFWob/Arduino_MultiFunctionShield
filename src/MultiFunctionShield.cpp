@@ -16,12 +16,51 @@ const uint8_t SEGMENT_MINUS = 0xBF;
 const uint8_t SEGMENT_SELECT[] = {0xF1,0xF2,0xF4,0xF8};                               // Ziffernposition (gemeinsame Anode, LSB)
 volatile uint8_t ActDigit = 0;
 volatile uint8_t SEGMENT_VALUE[4];
+const uint8_t SEGMENT_MAP_LETTERS[] = {
+    95, //a
+    124,  //b
+    88, //c
+    94,  //d
+    121,     //e
+    113, //f
+    61,   //g
+    116,     //h
+    17,         //i
+    13,         //j  
+    117,        //k
+    56,    //L
+    85,    //M
+    84,        //n
+    92,        //o
+    115,     //p
+    103,     //q
+    80,         //r
+    45,      //s
+    120,        //t
+    28,      //u
+    42,       //v
+    106,    //w
+    20,         //x
+    110,   //y
+    27          //z
+};
 
+#if !defined(FAST_ISR)
 static MultiFunctionShield *instance;
+#else
+static uint8_t latchBit;
+static uint8_t* latchOut;
+static uint8_t clockBit;
+static uint8_t* clockOut;
+static uint8_t dataBit;
+static uint8_t* dataOut;
+#endif
 
 MultiFunctionShield::MultiFunctionShield(void)  //constructor
 {
+#if !defined(FAST_ISR)  
   instance = this;
+#endif
 }
 
 void MultiFunctionShield::begin(void)
@@ -32,7 +71,14 @@ void MultiFunctionShield::begin(void)
   pinMode(LATCH_PIN,OUTPUT);
   pinMode(CLK_PIN,OUTPUT);
   pinMode(DATA_PIN,OUTPUT);
-    
+#if defined(FAST_ISR)
+  latchBit = digitalPinToBitMask(LATCH_PIN);
+  latchOut = portOutputRegister(digitalPinToPort(LATCH_PIN));
+  clockBit = digitalPinToBitMask(CLK_PIN);
+  clockOut = portOutputRegister(digitalPinToPort(CLK_PIN));
+  dataBit = digitalPinToBitMask(DATA_PIN);
+  dataOut = portOutputRegister(digitalPinToPort(DATA_PIN));
+#endif    
   TCCR1A = 0;                                           // Register loeschen
   OCR1A = 1000;                                         // Vergleichswert x = (CPU / (2 x Teiler x f)) - 1
   TCCR1B |= (1 << CS10) | (1 << CS11) | (1 << WGM12);   // CTC-Mode, Teiler = 64
@@ -42,7 +88,76 @@ void MultiFunctionShield::begin(void)
   Clear();
 }
 
-void MultiFunctionShield::Display (int16_t value)
+#if defined(FAST_ISR)
+void shiftOut(uint8_t dataPin, uint8_t clockPin, uint8_t val)
+{
+        uint8_t i;
+        uint8_t oldSREG = SREG;
+        for (i = 0; i < 8; i++)  {
+                //cli();
+                
+                if (val & 0x80)
+                  *dataOut |= dataBit;
+                else
+                  *dataOut &= ~dataBit;
+                //digitalWrite(dataPin, (val & 0x80) != 0);
+                //SREG = oldSREG;
+                //cli();
+                //*clockOut |= clockBit;
+                //*clockOut |= clockBit;
+                //SREG = oldSREG;
+                *clockOut |= clockBit;
+                val <<= 1;
+                //cli();
+                //cli();
+                SREG = oldSREG;
+//                cli();
+
+//                SREG = oldSREG;
+                //cli();
+                //SREG = oldSREG;
+                //cli();
+                *clockOut &= ~clockBit;
+        }
+        //SREG = oldSREG;
+}
+
+void shiftOut16(uint8_t dataPin, uint8_t clockPin, uint16_t val)
+{
+        uint8_t i;
+        uint8_t oldSREG = SREG;
+        for (i = 0; i < 16; i++)  {
+                //cli();
+                
+                if (val & 0x8000)
+                  *dataOut |= dataBit;
+                else
+                  *dataOut &= ~dataBit;
+                //digitalWrite(dataPin, (val & 0x80) != 0);
+                //SREG = oldSREG;
+                //cli();
+                //*clockOut |= clockBit;
+                //*clockOut |= clockBit;
+                //SREG = oldSREG;
+                *clockOut |= clockBit;
+                val <<= 1;
+                //cli();
+                //cli();
+                SREG = oldSREG;
+//                cli();
+
+//                SREG = oldSREG;
+                //cli();
+                //SREG = oldSREG;
+                //cli();
+                *clockOut &= ~clockBit;
+        }
+        //SREG = oldSREG;
+}
+
+#endif
+
+void MultiFunctionShield::Display (int16_t value, uint8_t dotMode)
 {
   if ((value > 9999) || (value < -999))   // out of range
   {
@@ -56,41 +171,146 @@ void MultiFunctionShield::Display (int16_t value)
     if (value >= 0)   // positive values
     {
       if (value > 999)
-        SEGMENT_VALUE[0] = SEGMENT_MAP [(uint8_t) (value / 1000)];
+        DisplayChar(3, '0' + (value / 1000), dotMode);
       else
-        SEGMENT_VALUE[0] = SEGMENT_BLANK;
-    
+        DisplayChar(3, ' ', dotMode);
       if (value > 99)
-        SEGMENT_VALUE[1] = SEGMENT_MAP [(uint8_t) ((value / 100) % 10)];
+        DisplayChar(2, '0' + ((uint8_t) ((value / 100) % 10)), dotMode);
       else
-        SEGMENT_VALUE[1] = SEGMENT_BLANK;
+        DisplayChar(2, ' ', dotMode);
     
       if (value > 9) 
-        SEGMENT_VALUE[2] = SEGMENT_MAP [(uint8_t) ((value / 10) % 10)];
+        DisplayChar(1, '0' + ((uint8_t) ((value / 10) % 10)), dotMode);
       else
-        SEGMENT_VALUE[2] = SEGMENT_BLANK;
+        DisplayChar(1, ' ', dotMode);
     
-      SEGMENT_VALUE[3] = SEGMENT_MAP [(uint8_t) (value % 10)];
+      DisplayChar(0, '0' + (uint8_t) (value % 10), dotMode);
       
     }
     if (value < 0)      // negative values: "-" left
     {
       value *= -1;
-      SEGMENT_VALUE[0] = SEGMENT_MINUS;
-    
+      DisplayChar(3, '-', dotMode);
       if (value > 99)
-        SEGMENT_VALUE[1] = SEGMENT_MAP [(uint8_t) ((value / 100) % 10)];
+        DisplayChar(2, '0' + (uint8_t) ((value / 100) % 10), dotMode);
       else
-        SEGMENT_VALUE[1] = SEGMENT_BLANK;
+        DisplayChar(2, ' ', dotMode);
     
       if (value > 9) 
-        SEGMENT_VALUE[2] = SEGMENT_MAP [(uint8_t) ((value / 10) % 10)];
+        DisplayChar(1, '0' + (uint8_t) ((value / 10) % 10), dotMode);
       else
-        SEGMENT_VALUE[2] = SEGMENT_BLANK;
+        DisplayChar(1, ' ', dotMode);
     
-      SEGMENT_VALUE[3] = SEGMENT_MAP [(uint8_t) (value % 10)];
+      DisplayChar(0, '0' + (uint8_t) (value % 10), dotMode);
     }
   }
+  if (dotMode != 0)
+    if (dotMode < 16) 
+      DisplayDots(dotMode);
+}
+
+void MultiFunctionShield::DisplayDots(uint8_t dots)
+{
+  uint8_t dotMask = 1;
+  for(int i=0;i < 4;i++)
+    {
+      if ((dots & dotMask) != 0)
+        SEGMENT_VALUE[3 - i] &= 0x7f;
+      else
+        SEGMENT_VALUE[3 - i] |= 0x80;
+      dotMask = dotMask << 1;
+    }
+}
+
+void MultiFunctionShield::DisplayDot(uint8_t dot, bool show)
+{
+  if (dot < 4)
+    if (show)
+      SEGMENT_VALUE[3 - dot] &= 0x7f;
+    else
+      SEGMENT_VALUE[3 - dot] |= 0x80;
+}
+
+uint8_t MultiFunctionShield::GetDot(uint8_t dot)
+{
+uint8_t ret = 0;
+  if (dot < 4)
+    if (0 == (SEGMENT_VALUE[3 - dot] & 0x80))
+      ret = 128;
+  return ret;
+}
+
+void MultiFunctionShield::DisplayBitmap(uint8_t pos, uint8_t bmap) 
+{
+  if (pos < 4) 
+  {
+    SEGMENT_VALUE[3 - pos] = ~bmap;
+  }
+}
+
+void MultiFunctionShield::DisplayChar(uint8_t pos, char c, uint8_t dotMode)
+{
+  uint8_t bmap = 0;
+  if (pos < 4)
+  {
+    if (isDigit(c))
+      bmap = ~SEGMENT_MAP[c - '0']; 
+    else if (isalpha(c)) 
+    {
+      c = tolower(c);
+      if ((c >= 'a') && (c <= 'z'))
+        bmap = SEGMENT_MAP_LETTERS[c - 'a'];
+    }
+    else if ('-' == c)
+      bmap = 64;
+    else if ('_' == c)
+      bmap = 8;
+    DisplayBitmap(pos, bmap | (dotMode==DOT_KEEP?GetDot(pos):(dotMode == DOT_ON?0x80:0)));
+  }
+}
+
+void MultiFunctionShield::DisplayText(const char *s, uint8_t dotMode)
+{
+  for(int i = 0;i < 4;i++)
+  {
+    char c;
+    if (4 - i < strlen(s))
+      c = 0;
+    else
+      c = *(s++);
+    DisplayChar(3 - i, c, dotMode);
+  }
+  if (dotMode)
+    if (dotMode < 16)
+      DisplayDots(dotMode);
+}
+
+void MultiFunctionShield::DisplayHexValue(uint16_t value, uint8_t dotMode, char padc)
+{
+  for(int i = 0;i < 4;i++)
+  {
+    char c;
+    uint8_t x = value & 0xf;
+    if ((0 == value) && (0 < i))
+      c = padc;
+    else
+      c = x < 10?('0' + x):('a' + x - 10);
+    value >>= 4;
+    DisplayChar(i, c);
+  }
+  if (dotMode)
+    if (dotMode < 16)
+      DisplayDots(dotMode);
+}
+
+void MultiFunctionShield::DisplayHexValue(uint16_t value, uint8_t dotMode)
+{
+  DisplayHexValue(value, dotMode, ' ');
+}
+
+void MultiFunctionShield::DisplayHexValue0(uint16_t value, uint8_t dotMode)
+{
+  DisplayHexValue(value, dotMode, '0');
 }
 
 void MultiFunctionShield::Clear(void) 
@@ -101,6 +321,28 @@ void MultiFunctionShield::Clear(void)
   SEGMENT_VALUE[3] = SEGMENT_BLANK;
 }
 
+
+
+#if defined(FAST_ISR)
+ISR(TIMER1_COMPA_vect)          // interrupt service routine 
+{
+  uint16_t val = ((uint16_t)(SEGMENT_VALUE[ActDigit]))<<8 | SEGMENT_SELECT[ActDigit];
+  uint8_t oldSREG = SREG;
+  *latchOut &= ~latchBit;
+  for (uint8_t i = 0; i < 16; i++)  {
+          *clockOut &= ~clockBit;
+          if (val & 0x8000)
+            *dataOut |= dataBit;
+          else
+            *dataOut &= ~dataBit;
+          *clockOut |= clockBit;
+          val <<= 1;
+  }
+
+  ActDigit = (ActDigit + 1) & 0x3;
+  *latchOut |= latchBit;
+} 
+#else
 void MultiFunctionShield::WriteNumberToSegment(uint8_t digit)
 {
   digitalWrite(LATCH_PIN,LOW);                                      // Uebernahme-Takt: Ausgang Aus
@@ -119,8 +361,10 @@ void MultiFunctionShield::ISRFunc(void)
     case 4 : WriteNumberToSegment(3); ActDigit = 0; break; 
   }
 }
-    
+
+
 ISR(TIMER1_COMPA_vect)          // interrupt service routine 
 {
   instance->ISRFunc();
 } 
+#endif
