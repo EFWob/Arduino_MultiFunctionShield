@@ -43,7 +43,8 @@ void loop()
   if (count != oldCount) 
   {
     MFS.DisplayDot(oldCount, false);
+    MFS.DisplayDot(count);
     oldCount = count;
   }
-  MFS.DisplayDot(count);
+  
 }

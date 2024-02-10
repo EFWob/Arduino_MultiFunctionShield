@@ -88,120 +88,28 @@ void MultiFunctionShield::begin(void)
   Clear();
 }
 
-#if defined(FAST_ISR)
-void shiftOut(uint8_t dataPin, uint8_t clockPin, uint8_t val)
-{
-        uint8_t i;
-        uint8_t oldSREG = SREG;
-        for (i = 0; i < 8; i++)  {
-                //cli();
-                
-                if (val & 0x80)
-                  *dataOut |= dataBit;
-                else
-                  *dataOut &= ~dataBit;
-                //digitalWrite(dataPin, (val & 0x80) != 0);
-                //SREG = oldSREG;
-                //cli();
-                //*clockOut |= clockBit;
-                //*clockOut |= clockBit;
-                //SREG = oldSREG;
-                *clockOut |= clockBit;
-                val <<= 1;
-                //cli();
-                //cli();
-                SREG = oldSREG;
-//                cli();
-
-//                SREG = oldSREG;
-                //cli();
-                //SREG = oldSREG;
-                //cli();
-                *clockOut &= ~clockBit;
-        }
-        //SREG = oldSREG;
-}
-
-void shiftOut16(uint8_t dataPin, uint8_t clockPin, uint16_t val)
-{
-        uint8_t i;
-        uint8_t oldSREG = SREG;
-        for (i = 0; i < 16; i++)  {
-                //cli();
-                
-                if (val & 0x8000)
-                  *dataOut |= dataBit;
-                else
-                  *dataOut &= ~dataBit;
-                //digitalWrite(dataPin, (val & 0x80) != 0);
-                //SREG = oldSREG;
-                //cli();
-                //*clockOut |= clockBit;
-                //*clockOut |= clockBit;
-                //SREG = oldSREG;
-                *clockOut |= clockBit;
-                val <<= 1;
-                //cli();
-                //cli();
-                SREG = oldSREG;
-//                cli();
-
-//                SREG = oldSREG;
-                //cli();
-                //SREG = oldSREG;
-                //cli();
-                *clockOut &= ~clockBit;
-        }
-        //SREG = oldSREG;
-}
-
-#endif
-
 void MultiFunctionShield::Display (int16_t value, uint8_t dotMode)
 {
   if ((value > 9999) || (value < -999))   // out of range
   {
-    SEGMENT_VALUE[0] = SEGMENT_MINUS;
-    SEGMENT_VALUE[1] = SEGMENT_MINUS;
-    SEGMENT_VALUE[2] = SEGMENT_MINUS;
-    SEGMENT_VALUE[3] = SEGMENT_MINUS;
+    DisplayText("----", dotMode);
   }
   else    // possible range
   {
-    if (value >= 0)   // positive values
+    uint8_t digits = 4;
+    if (value < 0)
     {
-      if (value > 999)
-        DisplayChar(3, '0' + (value / 1000), dotMode);
-      else
-        DisplayChar(3, ' ', dotMode);
-      if (value > 99)
-        DisplayChar(2, '0' + ((uint8_t) ((value / 100) % 10)), dotMode);
-      else
-        DisplayChar(2, ' ', dotMode);
-    
-      if (value > 9) 
-        DisplayChar(1, '0' + ((uint8_t) ((value / 10) % 10)), dotMode);
-      else
-        DisplayChar(1, ' ', dotMode);
-    
-      DisplayChar(0, '0' + (uint8_t) (value % 10), dotMode);
-      
-    }
-    if (value < 0)      // negative values: "-" left
-    {
-      value *= -1;
+      value = -value;
+      digits--;
       DisplayChar(3, '-', dotMode);
-      if (value > 99)
-        DisplayChar(2, '0' + (uint8_t) ((value / 100) % 10), dotMode);
-      else
-        DisplayChar(2, ' ', dotMode);
-    
-      if (value > 9) 
-        DisplayChar(1, '0' + (uint8_t) ((value / 10) % 10), dotMode);
-      else
-        DisplayChar(1, ' ', dotMode);
-    
-      DisplayChar(0, '0' + (uint8_t) (value % 10), dotMode);
+    }
+    for(int i = 0;i < digits;i++)
+    {
+      char c = value % 10;
+      if ((0 != value) || (0 == i))
+        c = c + '0';
+      DisplayChar(i, c, dotMode);
+      value = value / 10;
     }
   }
   if (dotMode != 0)
@@ -214,7 +122,7 @@ void MultiFunctionShield::DisplayDots(uint8_t dots)
   uint8_t dotMask = 1;
   for(int i=0;i < 4;i++)
     {
-      if ((dots & dotMask) != 0)
+      if ((dots & dotMask) != 0) 
         SEGMENT_VALUE[3 - i] &= 0x7f;
       else
         SEGMENT_VALUE[3 - i] |= 0x80;
@@ -326,17 +234,18 @@ void MultiFunctionShield::Clear(void)
 #if defined(FAST_ISR)
 ISR(TIMER1_COMPA_vect)          // interrupt service routine 
 {
-  uint16_t val = ((uint16_t)(SEGMENT_VALUE[ActDigit]))<<8 | SEGMENT_SELECT[ActDigit];
-  uint8_t oldSREG = SREG;
+  uint16_t val;
   *latchOut &= ~latchBit;
-  for (uint8_t i = 0; i < 16; i++)  {
-          *clockOut &= ~clockBit;
-          if (val & 0x8000)
-            *dataOut |= dataBit;
-          else
-            *dataOut &= ~dataBit;
-          *clockOut |= clockBit;
-          val <<= 1;
+  val  = ((uint16_t)(SEGMENT_VALUE[ActDigit]))<<8 | SEGMENT_SELECT[ActDigit];
+  for (uint8_t i = 0; i < 16; i++)  
+  {
+    *clockOut &= ~clockBit;
+    if (val & 0x8000)
+      *dataOut |= dataBit;
+    else
+      *dataOut &= ~dataBit;
+    *clockOut |= clockBit;
+    val <<= 1;
   }
 
   ActDigit = (ActDigit + 1) & 0x3;

@@ -145,7 +145,7 @@ class MultiFunctionShield
                     and the rightmost dot will be lit
       @return none
     */
-    void DisplayText (const char* s, uint8_t dots = DOT_NONE); 
+    void DisplayText (const char* s, uint8_t dotMode = DOT_OFF); 
 
     /**
       @brief  Write a given 16-bit value on the display as hexadecimal number
@@ -162,7 +162,7 @@ class MultiFunctionShield
                     and the rightmost dot will be lit
       @return none
     */
-    void DisplayHexValue(uint16_t value, uint8_t dots = DOT_NONE);
+    void DisplayHexValue(uint16_t value, uint8_t dotMode = DOT_OFF);
 
     /**
       @brief  Write a given 16-bit value on the display as hexadecimal number
@@ -179,7 +179,7 @@ class MultiFunctionShield
                     and the rightmost dot will be lit
       @return none
     */
-    void DisplayHexValue0(uint16_t value, uint8_t dots = DOT_NONE);
+    void DisplayHexValue0(uint16_t value, uint8_t dotMode = DOT_OFF);
 
 #if !defined(FAST_ISR)
     /**
